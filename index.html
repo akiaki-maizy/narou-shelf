@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>なろう本棚</title>
+<style>
+:root{
+  --bg:#111418;--panel:#1a1f25;--line:#2b333d;--text:#eef2f6;--muted:#9aa6b2;
+  --accent:#5aa9ff;--danger:#ff6b6b;--warn:#ffcc66;--ok:#5fd18b;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Noto Sans JP","Yu Gothic UI",sans-serif;background:var(--bg);color:var(--text)}
+header{position:sticky;top:0;z-index:5;padding:14px 16px;background:rgba(17,20,24,.96);border-bottom:1px solid var(--line)}
+h1{font-size:20px;margin:0 0 10px}
+.summary{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px}
+.toolbar{display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap}
+button,.btn{appearance:none;border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:var(--panel);color:var(--text);font-size:15px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+button.primary,.btn.primary{background:var(--accent);color:#06131f;border-color:transparent;font-weight:700}
+button.danger{color:#ffd8d8;border-color:#6b3333}
+input,select,textarea{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:#0f1317;color:var(--text);font-size:16px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}
+main{padding:0 16px 90px}
+.card{border:1px solid var(--line);background:var(--panel);border-radius:16px;padding:14px;margin:10px 0}
+.title{font-size:17px;font-weight:700;margin-bottom:6px;line-height:1.45}
+.meta{font-size:13px;color:var(--muted);line-height:1.6}
+.unread{color:var(--warn);font-weight:700}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.actions .wide{grid-column:1/-1}
+dialog{width:min(92vw,560px);border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--text);padding:16px}
+dialog::backdrop{background:rgba(0,0,0,.65)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.empty{color:var(--muted);text-align:center;padding:40px 10px}
+.filters{padding:0 16px 8px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.small{font-size:12px;color:var(--muted)}
+.fetchbox{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end}
+.statusmsg{margin-top:8px;font-size:13px;min-height:1.4em}
+.statusmsg.ok{color:var(--ok)}
+.statusmsg.err{color:#ff9f9f}
+.readonly{background:#151a20}
+</style>
+
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#111418">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+
+</head>
+<body>
+<header>
+  <h1>📚 なろう本棚</h1>
+  <div class="summary" id="summary"></div>
+</header>
+
+<div class="toolbar">
+  <button class="primary" id="addBtn">＋ 作品を登録</button>
+  <button id="refreshAllBtn">最新話を更新</button>
+  <button id="exportBtn">バックアップ</button>
+  <button id="importBtn">復元</button>
+  <input type="file" id="importFile" accept=".json,application/json" hidden>
+</div>
+
+<div class="filters">
+  <select id="statusFilter">
+    <option value="">すべての状態</option>
+    <option value="reading">読書中</option>
+    <option value="waiting">更新待ち</option>
+    <option value="finished">読了</option>
+    <option value="paused">中断</option>
+  </select>
+  <select id="sortBy">
+    <option value="updated">更新順</option>
+    <option value="unread">未読数順</option>
+    <option value="title">タイトル順</option>
+  </select>
+</div>
+
+<main id="list"></main>
+
+<dialog id="editDialog">
+  <form method="dialog" id="editForm">
+    <h2 id="dialogTitle">作品を登録</h2>
+    <input type="hidden" id="bookId">
+
+    <label>作品URL または 話URL</label>
+    <div class="fetchbox">
+      <input id="url" type="url" required placeholder="https://ncode.syosetu.com/n1234ab/125/">
+      <button type="button" id="fetchBtn">情報取得</button>
+    </div>
+    <div class="statusmsg" id="fetchMsg"></div>
+
+    <label>作品タイトル</label>
+    <input id="title" required placeholder="URLから自動入力">
+
+    <div class="row">
+      <div>
+        <label>Nコード</label>
+        <input id="ncode" class="readonly" readonly>
+      </div>
+      <div>
+        <label>作者</label>
+        <input id="writer" class="readonly" readonly>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>読了話数</label>
+        <input id="readEpisode" type="number" min="0" value="0">
+      </div>
+      <div>
+        <label>最新話数</label>
+        <input id="latestEpisode" type="number" min="0" value="0">
+      </div>
+    </div>
+
+    <label>状態</label>
+    <select id="status">
+      <option value="reading">読書中</option>
+      <option value="waiting">更新待ち</option>
+      <option value="finished">読了</option>
+      <option value="paused">中断</option>
+    </select>
+
+    <label>評価</label>
+    <select id="rating">
+      <option value="0">未評価</option>
+      <option value="1">★</option>
+      <option value="2">★★</option>
+      <option value="3">★★★</option>
+      <option value="4">★★★★</option>
+      <option value="5">★★★★★</option>
+    </select>
+
+    <label>メモ</label>
+    <textarea id="memo" rows="3" placeholder="感想、登場人物、再開時メモなど"></textarea>
+
+    <div class="actions">
+      <button type="button" id="cancelBtn">キャンセル</button>
+      <button type="submit" class="primary">保存</button>
+      <button type="button" class="danger wide" id="deleteBtn" hidden>削除</button>
+    </div>
+    <p class="small">作品情報は「なろう小説API」から取得します。検索除外作品などは取得できない場合があります。</p>
+  </form>
+</dialog>
+
+<script>
+const KEY_V3="narou_shelf_mvp_v3";
+const KEY_V2="narou_shelf_mvp_v2";
+const KEY_V1="narou_shelf_mvp_v1";
+const $=id=>document.getElementById(id);
+
+function load(){
+  try{
+    const v3=JSON.parse(localStorage.getItem(KEY_V3)||"null");
+    if(Array.isArray(v3)) return v3;
+    const v2=JSON.parse(localStorage.getItem(KEY_V2)||"null");
+    if(Array.isArray(v2)){
+      localStorage.setItem(KEY_V3, JSON.stringify(v2));
+      return v2;
+    }
+    const v1=JSON.parse(localStorage.getItem(KEY_V1)||"null");
+    if(Array.isArray(v1)){
+      localStorage.setItem(KEY_V2, JSON.stringify(v1));
+      return v1;
+    }
+  }catch(e){}
+  return [];
+}
+let books=load();
+
+function save(){localStorage.setItem(KEY_V3,JSON.stringify(books));render()}
+function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function statusLabel(s){return({reading:"読書中",waiting:"更新待ち",finished:"読了",paused:"中断"})[s]||s}
+
+function parseNarouUrl(url){
+  try{
+    const u=new URL(url);
+    if(u.hostname!=="ncode.syosetu.com" && u.hostname!=="novel18.syosetu.com") return null;
+    const parts=u.pathname.split("/").filter(Boolean);
+    const code=(parts[0]||"").toUpperCase();
+    if(!/^N[0-9A-Z]+$/i.test(code)) return null;
+    const episode=(parts[1] && /^\d+$/.test(parts[1])) ? Number(parts[1]) : null;
+    return {ncode:code,episode,base:`https://ncode.syosetu.com/${code.toLowerCase()}/`};
+  }catch(e){return null}
+}
+
+function apiJsonp(ncode){
+  return new Promise((resolve,reject)=>{
+    const cb="narouCb_"+Date.now()+"_"+Math.floor(Math.random()*100000);
+    const script=document.createElement("script");
+    const timer=setTimeout(()=>cleanup(new Error("timeout")),10000);
+    function cleanup(err,data){
+      clearTimeout(timer);
+      delete window[cb];
+      script.remove();
+      err?reject(err):resolve(data);
+    }
+    window[cb]=data=>cleanup(null,data);
+    script.onerror=()=>cleanup(new Error("load error"));
+    const params=new URLSearchParams({
+      out:"jsonp", callback:cb, ncode:ncode.toLowerCase(),
+      of:"t-n-w-gl-e-ga-i", lim:"1"
+    });
+    script.src="https://api.syosetu.com/novelapi/api/?"+params.toString();
+    document.head.appendChild(script);
+  });
+}
+
+async function fetchBookInfoFromUrl(url){
+  const parsed=parseNarouUrl(url);
+  if(!parsed) throw new Error("「小説家になろう」の作品URLまたは話URLを入力してください。");
+  const data=await apiJsonp(parsed.ncode);
+  if(!Array.isArray(data) || data.length<2) throw new Error("作品情報を取得できませんでした。");
+  const info=data[1];
+  return {
+    ...parsed,
+    title:String(info.title??""),
+    writer:String(info.writer??""),
+    latestEpisode:Number(info.general_all_no??0),
+    generalLastup:String(info.general_lastup??""),
+    end:Number(info.end??1),
+    isstop:Number(info.isstop??0)
+  };
+}
+
+async function fillFromUrl(){
+  const msg=$("fetchMsg");
+  msg.className="statusmsg";
+  msg.textContent="取得中…";
+  $("fetchBtn").disabled=true;
+  try{
+    const info=await fetchBookInfoFromUrl($("url").value.trim());
+    $("title").value=info.title;
+    $("ncode").value=info.ncode;
+    $("writer").value=info.writer;
+    $("latestEpisode").value=info.latestEpisode;
+    if(info.episode!==null) $("readEpisode").value=info.episode;
+    if(info.end===0 && info.latestEpisode>0 && Number($("readEpisode").value)>=info.latestEpisode){
+      $("status").value="finished";
+    }
+    msg.className="statusmsg ok";
+    msg.textContent=`取得しました：${info.latestEpisode}話 / ${info.writer || "作者名なし"}${info.generalLastup ? " / 最終掲載 "+info.generalLastup : ""}`;
+  }catch(e){
+    msg.className="statusmsg err";
+    msg.textContent=e.message || "取得に失敗しました。";
+  }finally{
+    $("fetchBtn").disabled=false;
+  }
+}
+
+function continueUrl(book){
+  const parsed=parseNarouUrl(book.url);
+  const base=parsed ? parsed.base : book.url.replace(/\/+$/,"")+"/";
+  const next=Math.max(1,Number(book.readEpisode||0)+1);
+  return base+next+"/";
+}
+
+function render(){
+  const filter=$("statusFilter").value, sortBy=$("sortBy").value;
+  const counts={
+    unread:books.filter(b=>Number(b.latestEpisode||0)>Number(b.readEpisode||0)&&b.status!=="finished").length,
+    reading:books.filter(b=>b.status==="reading").length,
+    waiting:books.filter(b=>b.status==="waiting").length,
+    finished:books.filter(b=>b.status==="finished").length
+  };
+  $("summary").innerHTML=`
+    <div class="chip">🔴 更新あり <b>${counts.unread}</b></div>
+    <div class="chip">🟡 読書中 <b>${counts.reading}</b></div>
+    <div class="chip">⚪ 更新待ち <b>${counts.waiting}</b></div>
+    <div class="chip">✅ 読了 <b>${counts.finished}</b></div>`;
+
+  let list=books.filter(b=>!filter||b.status===filter);
+  list=[...list].sort((a,b)=>{
+    if(sortBy==="title") return a.title.localeCompare(b.title,"ja");
+    if(sortBy==="unread") return ((b.latestEpisode||0)-(b.readEpisode||0))-((a.latestEpisode||0)-(a.readEpisode||0));
+    return (b.updatedAt||0)-(a.updatedAt||0);
+  });
+
+  $("list").innerHTML=list.length?list.map(b=>{
+    const unread=Math.max(0,Number(b.latestEpisode||0)-Number(b.readEpisode||0));
+    const rating=b.rating?"★".repeat(b.rating):"未評価";
+    return `<section class="card">
+      <div class="title">${esc(b.title)}</div>
+      <div class="meta">
+        ${esc(b.ncode||"")} ${b.writer?"・ "+esc(b.writer):""}<br>
+        ${statusLabel(b.status)} ・ ${rating}<br>
+        読了：第${Number(b.readEpisode||0)}話 / 最新：第${Number(b.latestEpisode||0)}話
+        ${unread?`<span class="unread"> ・ 未読 ${unread}話</span>`:""}
+      </div>
+      ${b.memo?`<div class="meta" style="margin-top:6px">${esc(b.memo)}</div>`:""}
+      <div class="actions">
+        <a class="btn primary" href="${esc(continueUrl(b))}" target="_blank" rel="noopener">続きから読む</a>
+        <button onclick="markLatestRead('${b.id}')">最新話まで読了</button>
+        <button onclick="openEdit('${b.id}')">編集</button>
+        <a class="btn" href="${esc((parseNarouUrl(b.url)||{}).base||b.url)}" target="_blank" rel="noopener">作品トップを開く</a>
+      </div>
+    </section>`;
+  }).join(""):`<div class="empty">まだ作品がありません。<br>URLを貼って本棚に移しましょう。</div>`;
+}
+
+function resetForm(){
+  $("editForm").reset();
+  $("bookId").value="";
+  $("readEpisode").value=0;
+  $("latestEpisode").value=0;
+  $("status").value="reading";
+  $("rating").value="0";
+  $("ncode").value="";
+  $("writer").value="";
+  $("fetchMsg").textContent="";
+  $("fetchMsg").className="statusmsg";
+}
+
+function openNew(){
+  $("dialogTitle").textContent="作品を登録";
+  resetForm();
+  $("deleteBtn").hidden=true;
+  $("editDialog").showModal();
+}
+
+window.markLatestRead=function(id){
+  const b=books.find(x=>x.id===id);
+  if(!b)return;
+  const latest=Number(b.latestEpisode||0);
+  if(latest<=0){
+    alert("最新話数が取得できていません。先に「最新話を更新」を実行してください。");
+    return;
+  }
+  if(Number(b.readEpisode||0)>=latest){
+    alert("すでに最新話まで読了になっています。");
+    return;
+  }
+  if(confirm(`第${latest}話まで読了として記録しますか？`)){
+    b.readEpisode=latest;
+    if(b.status!=="finished" && b.status!=="paused"){
+      b.status="waiting";
+    }
+    b.updatedAt=Date.now();
+    save();
+  }
+};
+
+window.openEdit=function(id){
+  const b=books.find(x=>x.id===id);if(!b)return;
+  $("dialogTitle").textContent="作品を編集";
+  $("bookId").value=b.id;
+  $("title").value=b.title||"";
+  $("url").value=b.url||"";
+  $("ncode").value=b.ncode||parseNarouUrl(b.url)?.ncode||"";
+  $("writer").value=b.writer||"";
+  $("readEpisode").value=b.readEpisode||0;
+  $("latestEpisode").value=b.latestEpisode||0;
+  $("status").value=b.status||"reading";
+  $("rating").value=b.rating||0;
+  $("memo").value=b.memo||"";
+  $("fetchMsg").textContent="";
+  $("fetchMsg").className="statusmsg";
+  $("deleteBtn").hidden=false;
+  $("editDialog").showModal();
+};
+
+$("editForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const id=$("bookId").value;
+  const parsed=parseNarouUrl($("url").value.trim());
+  const obj={
+    id:id||(crypto.randomUUID?crypto.randomUUID():String(Date.now())),
+    title:$("title").value.trim(),
+    url:$("url").value.trim(),
+    ncode:$("ncode").value.trim()||(parsed?.ncode||""),
+    writer:$("writer").value.trim(),
+    readEpisode:Number($("readEpisode").value||0),
+    latestEpisode:Number($("latestEpisode").value||0),
+    status:$("status").value,
+    rating:Number($("rating").value||0),
+    memo:$("memo").value.trim(),
+    updatedAt:Date.now()
+  };
+  if(!obj.title||!obj.url)return;
+  const i=books.findIndex(x=>x.id===obj.id);
+  if(i>=0)books[i]=obj;else books.unshift(obj);
+  save();$("editDialog").close();
+});
+
+$("fetchBtn").addEventListener("click",fillFromUrl);
+$("url").addEventListener("change",()=>{
+  const p=parseNarouUrl($("url").value.trim());
+  if(p){
+    $("ncode").value=p.ncode;
+    if(p.episode!==null && Number($("readEpisode").value||0)===0) $("readEpisode").value=p.episode;
+  }
+});
+
+$("refreshAllBtn").addEventListener("click",async()=>{
+  const btn=$("refreshAllBtn");btn.disabled=true;btn.textContent="更新中…";
+  let ok=0,ng=0;
+  for(const b of books){
+    try{
+      const p=parseNarouUrl(b.url);
+      if(!p){ng++;continue}
+      const info=await fetchBookInfoFromUrl(b.url);
+      b.ncode=info.ncode;b.title=info.title||b.title;b.writer=info.writer||b.writer;
+      b.latestEpisode=info.latestEpisode;b.updatedAt=Date.now();
+      if(info.end===0 && Number(b.readEpisode)>=Number(info.latestEpisode)) b.status="finished";
+      ok++;
+    }catch(e){ng++}
+  }
+  save();
+  btn.disabled=false;btn.textContent="最新話を更新";
+  alert(`更新完了：成功 ${ok}件 / 失敗 ${ng}件`);
+});
+
+$("deleteBtn").addEventListener("click",()=>{
+  const id=$("bookId").value;if(!id)return;
+  if(confirm("この作品を本棚から削除しますか？")){
+    books=books.filter(x=>x.id!==id);save();$("editDialog").close();
+  }
+});
+$("addBtn").addEventListener("click",openNew);
+$("cancelBtn").addEventListener("click",()=>$("editDialog").close());
+$("statusFilter").addEventListener("change",render);
+$("sortBy").addEventListener("change",render);
+
+$("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),books},null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="narou_shelf_backup_"+new Date().toISOString().slice(0,10)+".json";
+  a.click();URL.revokeObjectURL(a.href);
+});
+$("importBtn").addEventListener("click",()=>$("importFile").click());
+$("importFile").addEventListener("change",async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  try{
+    const data=JSON.parse(await file.text());
+    const incoming=Array.isArray(data)?data:data.books;
+    if(!Array.isArray(incoming))throw new Error();
+    if(confirm(`バックアップから ${incoming.length} 件を復元します。現在の本棚は置き換わります。`)){
+      books=incoming;save();
+    }
+  }catch(e){alert("バックアップファイルを読み込めませんでした。")}
+  e.target.value="";
+});
+
+render();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
+
+</script>
+</body>
+</html>

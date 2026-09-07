@@ -1,0 +1,9 @@
+{
+  "name": "なろう本棚",
+  "short_name": "なろう本棚",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#111418",
+  "theme_color": "#111418",
+  "description": "小説家になろうの読書進捗・更新待ちを管理する個人用本棚"
+}
