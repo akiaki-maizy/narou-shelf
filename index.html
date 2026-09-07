@@ -49,7 +49,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 </head>
 <body>
 <header>
-  <h1>📚 なろう本棚</h1>
+  <h1>📚 なろう本棚 <span style="font-size:12px;color:#9aa6b2">v4</span></h1>
   <div class="summary" id="summary"></div>
 </header>
 
@@ -217,6 +217,7 @@ async function fetchBookInfoFromUrl(url){
   const info=data[1];
   return {
     ...parsed,
+    isR18:parsed.isR18,
     title:String(info.title??""),
     writer:String(info.writer??""),
     latestEpisode:Number(info.general_all_no??0),
@@ -242,7 +243,7 @@ async function fillFromUrl(){
       $("status").value="finished";
     }
     msg.className="statusmsg ok";
-    msg.textContent=`取得しました：${info.latestEpisode}話 / ${info.writer || "作者名なし"}${info.generalLastup ? " / 最終掲載 "+info.generalLastup : ""}`;
+    msg.textContent=`取得しました：${info.latestEpisode}話 / ${info.writer || "作者名なし"}${info.isR18 ? " / R18" : ""}${info.generalLastup ? " / 最終掲載 "+info.generalLastup : ""}`;
   }catch(e){
     msg.className="statusmsg err";
     msg.textContent=e.message || "取得に失敗しました。";
