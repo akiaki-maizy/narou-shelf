@@ -85,7 +85,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 
     <label>作品URL または 話URL</label>
     <div class="fetchbox">
-      <input id="url" type="url" required placeholder="https://ncode.syosetu.com/n1234ab/125/">
+      <input id="url" type="url" required placeholder="https://ncode.syosetu.com/n1234ab/125/ または https://novel18.syosetu.com/n1234ab/125/">
       <button type="button" id="fetchBtn">情報取得</button>
     </div>
     <div class="statusmsg" id="fetchMsg"></div>
@@ -141,7 +141,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
       <button type="submit" class="primary">保存</button>
       <button type="button" class="danger wide" id="deleteBtn" hidden>削除</button>
     </div>
-    <p class="small">作品情報は「なろう小説API」から取得します。検索除外作品などは取得できない場合があります。</p>
+    <p class="small">作品情報は公式の「なろう小説API／なろうR18小説API」から取得します。検索除外作品などは取得できない場合があります。</p>
   </form>
 </dialog>
 
@@ -182,11 +182,12 @@ function parseNarouUrl(url){
     const code=(parts[0]||"").toUpperCase();
     if(!/^N[0-9A-Z]+$/i.test(code)) return null;
     const episode=(parts[1] && /^\d+$/.test(parts[1])) ? Number(parts[1]) : null;
-    return {ncode:code,episode,base:`https://ncode.syosetu.com/${code.toLowerCase()}/`};
+    const isR18=u.hostname==="novel18.syosetu.com";
+    return {ncode:code,episode,isR18,base:`https://${isR18?"novel18":"ncode"}.syosetu.com/${code.toLowerCase()}/`};
   }catch(e){return null}
 }
 
-function apiJsonp(ncode){
+function apiJsonp(ncode,isR18=false){
   return new Promise((resolve,reject)=>{
     const cb="narouCb_"+Date.now()+"_"+Math.floor(Math.random()*100000);
     const script=document.createElement("script");
@@ -203,15 +204,15 @@ function apiJsonp(ncode){
       out:"jsonp", callback:cb, ncode:ncode.toLowerCase(),
       of:"t-n-w-gl-e-ga-i", lim:"1"
     });
-    script.src="https://api.syosetu.com/novelapi/api/?"+params.toString();
+    script.src=`https://api.syosetu.com/${isR18?"novel18api":"novelapi"}/api/?`+params.toString();
     document.head.appendChild(script);
   });
 }
 
 async function fetchBookInfoFromUrl(url){
   const parsed=parseNarouUrl(url);
-  if(!parsed) throw new Error("「小説家になろう」の作品URLまたは話URLを入力してください。");
-  const data=await apiJsonp(parsed.ncode);
+  if(!parsed) throw new Error("「小説家になろう」またはR18作品の作品URL・話URLを入力してください。");
+  const data=await apiJsonp(parsed.ncode,parsed.isR18);
   if(!Array.isArray(data) || data.length<2) throw new Error("作品情報を取得できませんでした。");
   const info=data[1];
   return {
