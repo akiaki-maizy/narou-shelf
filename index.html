@@ -14,7 +14,7 @@ body{margin:0;font-family:system-ui,-apple-system,"Noto Sans JP","Yu Gothic UI",
 header{position:sticky;top:0;z-index:5;padding:14px 16px;background:rgba(17,20,24,.96);border-bottom:1px solid var(--line)}
 h1{font-size:20px;margin:0 0 10px}
 .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
-.chip{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;cursor:pointer;text-align:left;color:var(--text)} .chip.active{outline:2px solid var(--accent);border-color:var(--accent)}
 .toolbar{display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap}
 button,.btn{appearance:none;border:1px solid var(--line);border-radius:12px;padding:11px 13px;background:var(--panel);color:var(--text);font-size:15px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 button.primary,.btn.primary{background:var(--accent);color:#06131f;border-color:transparent;font-weight:700}
@@ -49,7 +49,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 </head>
 <body>
 <header>
-  <h1>📚 なろう本棚 <span style="font-size:12px;color:#9aa6b2">v5</span></h1>
+  <h1>📚 なろう本棚 <span style="font-size:12px;color:#9aa6b2">v6</span></h1>
   <div class="summary" id="summary"></div>
 </header>
 
@@ -169,6 +169,7 @@ function load(){
   return [];
 }
 let books=load();
+let summaryFilter="";
 
 function save(){localStorage.setItem(KEY_V3,JSON.stringify(books));render()}
 function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -268,12 +269,25 @@ function render(){
     finished:books.filter(b=>b.status==="finished").length
   };
   $("summary").innerHTML=`
-    <div class="chip">🔴 更新あり <b>${counts.unread}</b></div>
-    <div class="chip">🟡 読書中 <b>${counts.reading}</b></div>
-    <div class="chip">⚪ 更新待ち <b>${counts.waiting}</b></div>
-    <div class="chip">✅ 読了 <b>${counts.finished}</b></div>`;
+    <button type="button" class="chip ${summaryFilter==="unread"?"active":""}" data-summary="unread">🔴 更新あり <b>${counts.unread}</b></button>
+    <button type="button" class="chip ${summaryFilter==="reading"?"active":""}" data-summary="reading">🟡 読書中 <b>${counts.reading}</b></button>
+    <button type="button" class="chip ${summaryFilter==="waiting"?"active":""}" data-summary="waiting">⚪ 更新待ち <b>${counts.waiting}</b></button>
+    <button type="button" class="chip ${summaryFilter==="finished"?"active":""}" data-summary="finished">✅ 読了 <b>${counts.finished}</b></button>`;
+  document.querySelectorAll("[data-summary]").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      const value=btn.dataset.summary;
+      summaryFilter=summaryFilter===value?"":value;
+      $("statusFilter").value="";
+      render();
+    });
+  });
 
   let list=books.filter(b=>!filter||b.status===filter);
+  if(summaryFilter==="unread"){
+    list=list.filter(b=>Number(b.latestEpisode||0)>Number(b.readEpisode||0)&&b.status!=="finished");
+  }else if(summaryFilter){
+    list=list.filter(b=>b.status===summaryFilter);
+  }
   list=[...list].sort((a,b)=>{
     if(sortBy==="title") return a.title.localeCompare(b.title,"ja");
     if(sortBy==="unread") return ((b.latestEpisode||0)-(b.readEpisode||0))-((a.latestEpisode||0)-(a.readEpisode||0));
@@ -422,7 +436,7 @@ $("deleteBtn").addEventListener("click",()=>{
 });
 $("addBtn").addEventListener("click",openNew);
 $("cancelBtn").addEventListener("click",()=>$("editDialog").close());
-$("statusFilter").addEventListener("change",render);
+$("statusFilter").addEventListener("change",()=>{summaryFilter="";render();});
 $("sortBy").addEventListener("change",render);
 
 $("exportBtn").addEventListener("click",()=>{
