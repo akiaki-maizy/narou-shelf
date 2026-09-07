@@ -49,7 +49,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 </head>
 <body>
 <header>
-  <h1>📚 なろう本棚 <span style="font-size:12px;color:#9aa6b2">v4</span></h1>
+  <h1>📚 なろう本棚 <span style="font-size:12px;color:#9aa6b2">v5</span></h1>
   <div class="summary" id="summary"></div>
 </header>
 
@@ -429,7 +429,7 @@ $("exportBtn").addEventListener("click",()=>{
   const blob=new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),books},null,2)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download="narou_shelf_backup_"+new Date().toISOString().slice(0,10)+".json";
+  a.download="narou_shelf_backup.json";
   a.click();URL.revokeObjectURL(a.href);
 });
 $("importBtn").addEventListener("click",()=>$("importFile").click());
