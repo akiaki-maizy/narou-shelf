@@ -49,13 +49,14 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 </head>
 <body>
 <header>
-  <h1>📚 なろう本棚 <span style="font-size:12px;color:#9aa6b2">v6</span></h1>
+  <h1>📚 なろう本棚 <span style="font-size:12px;color:#9aa6b2">v7</span></h1>
   <div class="summary" id="summary"></div>
 </header>
 
 <div class="toolbar">
   <button class="primary" id="addBtn">＋ 作品を登録</button>
-  <button id="refreshAllBtn">最新話を更新</button>
+  <button id="refreshTrackedBtn">追跡中を更新</button>
+  <button id="refreshAllBtn">全作品を更新</button>
   <button id="exportBtn">バックアップ</button>
   <button id="importBtn">復元</button>
   <input type="file" id="importFile" accept=".json,application/json" hidden>
@@ -64,10 +65,10 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 <div class="filters">
   <select id="statusFilter">
     <option value="">すべての状態</option>
-    <option value="reading">読書中</option>
-    <option value="waiting">更新待ち</option>
+    <option value="unread">未読</option>
+    <option value="tracking">追跡中</option>
     <option value="finished">読了</option>
-    <option value="paused">中断</option>
+    <option value="paused">保留</option>
   </select>
   <select id="sortBy">
     <option value="updated">更新順</option>
@@ -117,11 +118,14 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 
     <label>状態</label>
     <select id="status">
-      <option value="reading">読書中</option>
-      <option value="waiting">更新待ち</option>
+      <option value="unread">未読</option>
+      <option value="tracking">追跡中</option>
       <option value="finished">読了</option>
-      <option value="paused">中断</option>
+      <option value="paused">保留</option>
     </select>
+
+    <input type="hidden" id="generalLastup">
+    <input type="hidden" id="workEnd" value="1">
 
     <label>評価</label>
     <select id="rating">
@@ -171,9 +175,22 @@ function load(){
 let books=load();
 let summaryFilter="";
 
+function normalizeStatus(status){
+  if(status==="reading" || status==="waiting") return "tracking";
+  if(["unread","tracking","paused","finished"].includes(status)) return status;
+  return "unread";
+}
+books=books.map(book=>({...book,status:normalizeStatus(book.status)}));
+
 function save(){localStorage.setItem(KEY_V3,JSON.stringify(books));render()}
 function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function statusLabel(s){return({reading:"読書中",waiting:"更新待ち",finished:"読了",paused:"中断"})[s]||s}
+function statusLabel(s){return({unread:"未読",tracking:"追跡中",finished:"読了",paused:"保留"})[normalizeStatus(s)]||s}
+
+function formatPublishedAt(value){
+  if(!value) return "";
+  const match=String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${Number(match[2])}/${Number(match[3])}更新` : String(value);
+}
 
 function parseNarouUrl(url){
   try{
@@ -239,6 +256,8 @@ async function fillFromUrl(){
     $("ncode").value=info.ncode;
     $("writer").value=info.writer;
     $("latestEpisode").value=info.latestEpisode;
+    $("generalLastup").value=info.generalLastup;
+    $("workEnd").value=info.end;
     if(info.episode!==null) $("readEpisode").value=info.episode;
     if(info.end===0 && info.latestEpisode>0 && Number($("readEpisode").value)>=info.latestEpisode){
       $("status").value="finished";
@@ -264,14 +283,16 @@ function render(){
   const filter=$("statusFilter").value, sortBy=$("sortBy").value;
   const counts={
     unread:books.filter(b=>Number(b.latestEpisode||0)>Number(b.readEpisode||0)&&b.status!=="finished").length,
-    reading:books.filter(b=>b.status==="reading").length,
-    waiting:books.filter(b=>b.status==="waiting").length,
+    unreadState:books.filter(b=>b.status==="unread").length,
+    tracking:books.filter(b=>b.status==="tracking").length,
+    paused:books.filter(b=>b.status==="paused").length,
     finished:books.filter(b=>b.status==="finished").length
   };
   $("summary").innerHTML=`
     <button type="button" class="chip ${summaryFilter==="unread"?"active":""}" data-summary="unread">🔴 更新あり <b>${counts.unread}</b></button>
-    <button type="button" class="chip ${summaryFilter==="reading"?"active":""}" data-summary="reading">🟡 読書中 <b>${counts.reading}</b></button>
-    <button type="button" class="chip ${summaryFilter==="waiting"?"active":""}" data-summary="waiting">⚪ 更新待ち <b>${counts.waiting}</b></button>
+    <button type="button" class="chip ${summaryFilter==="status-unread"?"active":""}" data-summary="status-unread">🆕 未読 <b>${counts.unreadState}</b></button>
+    <button type="button" class="chip ${summaryFilter==="tracking"?"active":""}" data-summary="tracking">📌 追跡中 <b>${counts.tracking}</b></button>
+    <button type="button" class="chip ${summaryFilter==="paused"?"active":""}" data-summary="paused">⏸ 保留 <b>${counts.paused}</b></button>
     <button type="button" class="chip ${summaryFilter==="finished"?"active":""}" data-summary="finished">✅ 読了 <b>${counts.finished}</b></button>`;
   document.querySelectorAll("[data-summary]").forEach(btn=>{
     btn.addEventListener("click",()=>{
@@ -285,6 +306,8 @@ function render(){
   let list=books.filter(b=>!filter||b.status===filter);
   if(summaryFilter==="unread"){
     list=list.filter(b=>Number(b.latestEpisode||0)>Number(b.readEpisode||0)&&b.status!=="finished");
+  }else if(summaryFilter==="status-unread"){
+    list=list.filter(b=>b.status==="unread");
   }else if(summaryFilter){
     list=list.filter(b=>b.status===summaryFilter);
   }
@@ -303,6 +326,7 @@ function render(){
         ${esc(b.ncode||"")} ${b.writer?"・ "+esc(b.writer):""}<br>
         ${statusLabel(b.status)} ・ ${rating}<br>
         読了：第${Number(b.readEpisode||0)}話 / 最新：第${Number(b.latestEpisode||0)}話
+        ${b.generalLastup?` ・ ${esc(formatPublishedAt(b.generalLastup))}`:""}
         ${unread?`<span class="unread"> ・ 未読 ${unread}話</span>`:""}
       </div>
       ${b.memo?`<div class="meta" style="margin-top:6px">${esc(b.memo)}</div>`:""}
@@ -321,10 +345,12 @@ function resetForm(){
   $("bookId").value="";
   $("readEpisode").value=0;
   $("latestEpisode").value=0;
-  $("status").value="reading";
+  $("status").value="unread";
   $("rating").value="0";
   $("ncode").value="";
   $("writer").value="";
+  $("generalLastup").value="";
+  $("workEnd").value="1";
   $("fetchMsg").textContent="";
   $("fetchMsg").className="statusmsg";
 }
@@ -350,9 +376,7 @@ window.markLatestRead=function(id){
   }
   if(confirm(`第${latest}話まで読了として記録しますか？`)){
     b.readEpisode=latest;
-    if(b.status!=="finished" && b.status!=="paused"){
-      b.status="waiting";
-    }
+    if(Number(b.workEnd)===0) b.status="finished";
     b.updatedAt=Date.now();
     save();
   }
@@ -368,9 +392,11 @@ window.openEdit=function(id){
   $("writer").value=b.writer||"";
   $("readEpisode").value=b.readEpisode||0;
   $("latestEpisode").value=b.latestEpisode||0;
-  $("status").value=b.status||"reading";
+  $("status").value=normalizeStatus(b.status);
   $("rating").value=b.rating||0;
   $("memo").value=b.memo||"";
+  $("generalLastup").value=b.generalLastup||"";
+  $("workEnd").value=Number.isFinite(Number(b.workEnd))?Number(b.workEnd):1;
   $("fetchMsg").textContent="";
   $("fetchMsg").className="statusmsg";
   $("deleteBtn").hidden=false;
@@ -392,6 +418,9 @@ $("editForm").addEventListener("submit",e=>{
     status:$("status").value,
     rating:Number($("rating").value||0),
     memo:$("memo").value.trim(),
+    generalLastup:$("generalLastup").value,
+    workEnd:Number($("workEnd").value||1),
+    lastCheckedAt:id?(books.find(x=>x.id===id)?.lastCheckedAt||null):null,
     updatedAt:Date.now()
   };
   if(!obj.title||!obj.url)return;
@@ -409,23 +438,39 @@ $("url").addEventListener("change",()=>{
   }
 });
 
-$("refreshAllBtn").addEventListener("click",async()=>{
-  const btn=$("refreshAllBtn");btn.disabled=true;btn.textContent="更新中…";
+async function refreshBooks(targets,button,defaultLabel){
+  $("refreshTrackedBtn").disabled=true;
+  $("refreshAllBtn").disabled=true;
+  button.textContent="更新中…";
   let ok=0,ng=0;
-  for(const b of books){
+  for(const b of targets){
     try{
       const p=parseNarouUrl(b.url);
       if(!p){ng++;continue}
       const info=await fetchBookInfoFromUrl(b.url);
       b.ncode=info.ncode;b.title=info.title||b.title;b.writer=info.writer||b.writer;
-      b.latestEpisode=info.latestEpisode;b.updatedAt=Date.now();
+      b.latestEpisode=info.latestEpisode;b.generalLastup=info.generalLastup;
+      b.workEnd=info.end;b.lastCheckedAt=new Date().toISOString();b.updatedAt=Date.now();
       if(info.end===0 && Number(b.readEpisode)>=Number(info.latestEpisode)) b.status="finished";
       ok++;
     }catch(e){ng++}
   }
   save();
-  btn.disabled=false;btn.textContent="最新話を更新";
+  $("refreshTrackedBtn").disabled=false;
+  $("refreshAllBtn").disabled=false;
+  button.textContent=defaultLabel;
   alert(`更新完了：成功 ${ok}件 / 失敗 ${ng}件`);
+}
+
+$("refreshTrackedBtn").addEventListener("click",()=>{
+  const targets=books.filter(b=>b.status==="tracking");
+  if(!targets.length){alert("追跡中の作品はありません。");return;}
+  refreshBooks(targets,$("refreshTrackedBtn"),"追跡中を更新");
+});
+
+$("refreshAllBtn").addEventListener("click",()=>{
+  if(!books.length){alert("作品がありません。");return;}
+  refreshBooks(books,$("refreshAllBtn"),"全作品を更新");
 });
 
 $("deleteBtn").addEventListener("click",()=>{
@@ -440,7 +485,7 @@ $("statusFilter").addEventListener("change",()=>{summaryFilter="";render();});
 $("sortBy").addEventListener("change",render);
 
 $("exportBtn").addEventListener("click",()=>{
-  const blob=new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),books},null,2)],{type:"application/json"});
+  const blob=new Blob([JSON.stringify({version:4,exportedAt:new Date().toISOString(),books},null,2)],{type:"application/json"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
   a.download="narou_shelf_backup.json";
@@ -454,7 +499,7 @@ $("importFile").addEventListener("change",async e=>{
     const incoming=Array.isArray(data)?data:data.books;
     if(!Array.isArray(incoming))throw new Error();
     if(confirm(`バックアップから ${incoming.length} 件を復元します。現在の本棚は置き換わります。`)){
-      books=incoming;save();
+      books=incoming.map(book=>({...book,status:normalizeStatus(book.status)}));save();
     }
   }catch(e){alert("バックアップファイルを読み込めませんでした。")}
   e.target.value="";
