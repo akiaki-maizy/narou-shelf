@@ -1,4 +1,4 @@
-const CACHE = "narou-shelf-v7.1";
+const CACHE = "narou-shelf-v7.2";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest"];
 
 self.addEventListener("install", event => {
