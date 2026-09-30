@@ -24,6 +24,7 @@ button.danger{color:#ffd8d8;border-color:#6b3333}
 .more-menu>summary::-webkit-details-marker{display:none}
 .menu-panel{position:absolute;z-index:10;top:calc(100% + 6px);right:0;min-width:190px;padding:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
 .menu-panel button,.menu-panel .btn{display:flex;width:100%;justify-content:flex-start;margin:4px 0;white-space:nowrap}
+.toolbar-more .menu-panel{left:0;right:auto}
 input,select,textarea{width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:#0f1317;color:var(--text);font-size:16px}
 label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}
 main{padding:0 16px 90px}
@@ -57,7 +58,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 </head>
 <body>
 <header>
-  <h1>📚 なろう本棚 <span style="font-size:12px;color:#9aa6b2">v7.1</span></h1>
+  <h1>📚 なろう本棚 <span style="font-size:12px;color:#9aa6b2">v7.2</span></h1>
   <div class="summary" id="summary"></div>
 </header>
 
@@ -166,36 +167,65 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 const KEY_V3="narou_shelf_mvp_v3";
 const KEY_V2="narou_shelf_mvp_v2";
 const KEY_V1="narou_shelf_mvp_v1";
+const KEY_PRE_RESTORE="narou_shelf_pre_restore";
 const $=id=>document.getElementById(id);
-
-function load(){
-  try{
-    const v3=JSON.parse(localStorage.getItem(KEY_V3)||"null");
-    if(Array.isArray(v3)) return v3;
-    const v2=JSON.parse(localStorage.getItem(KEY_V2)||"null");
-    if(Array.isArray(v2)){
-      localStorage.setItem(KEY_V3, JSON.stringify(v2));
-      return v2;
-    }
-    const v1=JSON.parse(localStorage.getItem(KEY_V1)||"null");
-    if(Array.isArray(v1)){
-      localStorage.setItem(KEY_V2, JSON.stringify(v1));
-      return v1;
-    }
-  }catch(e){}
-  return [];
-}
-let books=load();
-let summaryFilter="";
 
 function normalizeStatus(status){
   if(status==="reading" || status==="waiting") return "tracking";
   if(["unread","tracking","paused","finished"].includes(status)) return status;
   return "unread";
 }
-books=books.map(book=>({...book,status:normalizeStatus(book.status)}));
 
-function save(){localStorage.setItem(KEY_V3,JSON.stringify(books));render()}
+function normalizeBook(book){
+  if(!book || typeof book!=="object") return null;
+  const url=String(book.url||"").trim();
+  if(!url) return null;
+  return {
+    ...book,
+    id:String(book.id||((crypto.randomUUID&&crypto.randomUUID())||Date.now()+Math.random())),
+    title:String(book.title||"タイトル未設定"),
+    url,
+    ncode:String(book.ncode||""),
+    writer:String(book.writer||""),
+    readEpisode:Math.max(0,Number(book.readEpisode)||0),
+    latestEpisode:Math.max(0,Number(book.latestEpisode)||0),
+    status:normalizeStatus(book.status),
+    rating:Math.min(5,Math.max(0,Number(book.rating)||0)),
+    memo:String(book.memo||""),
+    generalLastup:String(book.generalLastup||""),
+    workEnd:Number.isFinite(Number(book.workEnd))?Number(book.workEnd):1,
+    lastCheckedAt:book.lastCheckedAt||null,
+    updatedAt:Number(book.updatedAt)||0
+  };
+}
+
+function normalizeBooks(value){
+  return Array.isArray(value)?value.map(normalizeBook).filter(Boolean):null;
+}
+
+function readStoredBooks(key){
+  try{
+    const raw=localStorage.getItem(key);
+    if(raw===null) return null;
+    return normalizeBooks(JSON.parse(raw));
+  }catch(e){return null}
+}
+
+function load(){
+  const v3=readStoredBooks(KEY_V3);
+  if(v3!==null) return v3;
+  const v2=readStoredBooks(KEY_V2);
+  if(v2!==null){try{localStorage.setItem(KEY_V3,JSON.stringify(v2))}catch(e){}return v2}
+  const v1=readStoredBooks(KEY_V1);
+  if(v1!==null){try{localStorage.setItem(KEY_V3,JSON.stringify(v1))}catch(e){}return v1}
+  return [];
+}
+
+let books=load();
+let summaryFilter="";
+
+function persist(){localStorage.setItem(KEY_V3,JSON.stringify(books))}
+function save(){persist();render()}
 function esc(s=""){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function statusLabel(s){return({unread:"未読",tracking:"追跡中",finished:"読了",paused:"保留"})[normalizeStatus(s)]||s}
 
@@ -260,18 +290,21 @@ async function fetchBookInfoFromUrl(url){
 
 async function fillFromUrl(){
   const msg=$("fetchMsg");
+  const requestedUrl=$("url").value.trim();
+  const requestedBookId=$("bookId").value;
   msg.className="statusmsg";
   msg.textContent="取得中…";
   $("fetchBtn").disabled=true;
   try{
-    const info=await fetchBookInfoFromUrl($("url").value.trim());
+    const info=await fetchBookInfoFromUrl(requestedUrl);
+    if($("url").value.trim()!==requestedUrl || $("bookId").value!==requestedBookId) return;
     $("title").value=info.title;
     $("ncode").value=info.ncode;
     $("writer").value=info.writer;
     $("latestEpisode").value=info.latestEpisode;
     $("generalLastup").value=info.generalLastup;
     $("workEnd").value=info.end;
-    if(info.episode!==null) $("readEpisode").value=info.episode;
+    if(info.episode!==null && (!requestedBookId || Number($("readEpisode").value||0)===0)) $("readEpisode").value=info.episode;
     if(info.end===0 && info.latestEpisode>0 && Number($("readEpisode").value)>=info.latestEpisode){
       $("status").value="finished";
     }
@@ -286,8 +319,9 @@ async function fillFromUrl(){
 }
 
 function continueUrl(book){
-  const parsed=parseNarouUrl(book.url);
-  const base=parsed ? parsed.base : book.url.replace(/\/+$/,"")+"/";
+  const url=String(book?.url||"");
+  const parsed=parseNarouUrl(url);
+  const base=parsed ? parsed.base : url.replace(/\/+$/,"")+"/";
   const next=Math.max(1,Number(book.readEpisode||0)+1);
   return base+next+"/";
 }
@@ -295,7 +329,7 @@ function continueUrl(book){
 function render(){
   const filter=$("statusFilter").value, sortBy=$("sortBy").value;
   const counts={
-    unread:books.filter(b=>Number(b.latestEpisode||0)>Number(b.readEpisode||0)&&b.status!=="finished").length,
+    unread:books.filter(b=>b.status==="tracking"&&Number(b.latestEpisode||0)>Number(b.readEpisode||0)).length,
     unreadState:books.filter(b=>b.status==="unread").length,
     tracking:books.filter(b=>b.status==="tracking").length
   };
@@ -315,16 +349,17 @@ function render(){
 
   let list=books.filter(b=>!filter||b.status===filter);
   if(summaryFilter==="unread"){
-    list=list.filter(b=>Number(b.latestEpisode||0)>Number(b.readEpisode||0)&&b.status!=="finished");
+    list=list.filter(b=>b.status==="tracking"&&Number(b.latestEpisode||0)>Number(b.readEpisode||0));
   }else if(summaryFilter==="status-unread"){
     list=list.filter(b=>b.status==="unread");
   }else if(summaryFilter){
     list=list.filter(b=>b.status===summaryFilter);
   }
   list=[...list].sort((a,b)=>{
-    if(sortBy==="title") return a.title.localeCompare(b.title,"ja");
+    if(sortBy==="title") return String(a.title||"").localeCompare(String(b.title||""),"ja");
     if(sortBy==="unread") return ((b.latestEpisode||0)-(b.readEpisode||0))-((a.latestEpisode||0)-(a.readEpisode||0));
-    return (b.updatedAt||0)-(a.updatedAt||0);
+    const published=String(b.generalLastup||"").localeCompare(String(a.generalLastup||""));
+    return published||((b.updatedAt||0)-(a.updatedAt||0));
   });
 
   $("list").innerHTML=list.length?list.map(b=>{
@@ -381,7 +416,7 @@ window.markLatestRead=function(id){
   if(!b)return;
   const latest=Number(b.latestEpisode||0);
   if(latest<=0){
-    alert("最新話数が取得できていません。先に「最新話を更新」を実行してください。");
+    alert("最新話数が取得できていません。先に「追跡中を更新」または「全作品を更新」を実行してください。");
     return;
   }
   if(Number(b.readEpisode||0)>=latest){
@@ -438,6 +473,11 @@ $("editForm").addEventListener("submit",e=>{
     updatedAt:Date.now()
   };
   if(!obj.title||!obj.url)return;
+  if(!parsed){alert("「小説家になろう」またはR18作品の作品URL・話URLを入力してください。");return}
+  if(!id && books.some(book=>parseNarouUrl(book.url)?.base===parsed.base)){
+    alert("この作品はすでに本棚へ登録されています。");
+    return;
+  }
   const i=books.findIndex(x=>x.id===obj.id);
   if(i>=0)books[i]=obj;else books.unshift(obj);
   save();$("editDialog").close();
@@ -456,24 +496,29 @@ async function refreshBooks(targets,button,defaultLabel){
   $("refreshTrackedBtn").disabled=true;
   $("refreshAllBtn").disabled=true;
   button.textContent="更新中…";
-  let ok=0,ng=0;
-  for(const b of targets){
-    try{
-      const p=parseNarouUrl(b.url);
-      if(!p){ng++;continue}
-      const info=await fetchBookInfoFromUrl(b.url);
-      b.ncode=info.ncode;b.title=info.title||b.title;b.writer=info.writer||b.writer;
-      b.latestEpisode=info.latestEpisode;b.generalLastup=info.generalLastup;
-      b.workEnd=info.end;b.lastCheckedAt=new Date().toISOString();b.updatedAt=Date.now();
-      if(info.end===0 && Number(b.readEpisode)>=Number(info.latestEpisode)) b.status="finished";
-      ok++;
-    }catch(e){ng++}
+  let ok=0,ng=0,saveError=null;
+  try{
+    for(const target of targets){
+      try{
+        const current=books.find(book=>book.id===target.id);
+        if(!current || !parseNarouUrl(current.url)){ng++;continue}
+        const info=await fetchBookInfoFromUrl(current.url);
+        current.ncode=info.ncode;current.title=info.title||current.title;current.writer=info.writer||current.writer;
+        current.latestEpisode=info.latestEpisode;current.generalLastup=info.generalLastup;
+        current.workEnd=info.end;current.lastCheckedAt=new Date().toISOString();current.updatedAt=Date.now();
+        if(info.end===0 && Number(current.readEpisode)>=Number(info.latestEpisode)) current.status="finished";
+        try{persist()}catch(e){saveError=e}
+        ok++;
+      }catch(e){ng++}
+    }
+  }finally{
+    try{save();saveError=null}catch(e){saveError=e;render()}
+    $("refreshTrackedBtn").disabled=false;
+    $("refreshAllBtn").disabled=false;
+    button.textContent=defaultLabel;
   }
-  save();
-  $("refreshTrackedBtn").disabled=false;
-  $("refreshAllBtn").disabled=false;
-  button.textContent=defaultLabel;
-  alert(`更新完了：成功 ${ok}件 / 失敗 ${ng}件`);
+  if(saveError) alert("更新結果を端末へ保存できませんでした。空き容量やブラウザの保存設定を確認してください。");
+  else alert(`更新完了：成功 ${ok}件 / 失敗 ${ng}件`);
 }
 
 $("refreshTrackedBtn").addEventListener("click",()=>{
@@ -503,7 +548,10 @@ $("exportBtn").addEventListener("click",()=>{
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
   a.download="narou_shelf_backup.json";
-  a.click();URL.revokeObjectURL(a.href);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 });
 $("importBtn").addEventListener("click",()=>$("importFile").click());
 $("importFile").addEventListener("change",async e=>{
@@ -512,8 +560,12 @@ $("importFile").addEventListener("change",async e=>{
     const data=JSON.parse(await file.text());
     const incoming=Array.isArray(data)?data:data.books;
     if(!Array.isArray(incoming))throw new Error();
-    if(confirm(`バックアップから ${incoming.length} 件を復元します。現在の本棚は置き換わります。`)){
-      books=incoming.map(book=>({...book,status:normalizeStatus(book.status)}));save();
+    const normalized=normalizeBooks(incoming);
+    if(normalized.length!==incoming.length) throw new Error();
+    if(normalized.length===0){alert("作品が含まれていないバックアップは復元できません。");e.target.value="";return}
+    if(confirm(`現在の ${books.length} 件を、バックアップの ${normalized.length} 件で置き換えますか？`)){
+      localStorage.setItem(KEY_PRE_RESTORE,JSON.stringify(books));
+      books=normalized;save();
     }
   }catch(e){alert("バックアップファイルを読み込めませんでした。")}
   e.target.value="";
