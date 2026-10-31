@@ -1,11 +1,15 @@
 name: Narou Shelf smoke tests
 on:
-  push:
-    branches:
-      - feature/v7.3-reading-backup
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+concurrency:
+  group: narou-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   smoke:
     runs-on: ubuntu-latest
