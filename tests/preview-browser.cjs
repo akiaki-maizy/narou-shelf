@@ -6,6 +6,12 @@ const {chromium}=require("playwright");
 const ROOT=path.resolve(__dirname,"..");
 const PREFIX="/narou-shelf/preview/v7.3/";
 const FILES=new Set(["index.html","sw.js","manifest.webmanifest"]);
+async function ensureMoreOpen(page){
+  const menu=page.locator(".toolbar-more");
+  if(!(await menu.evaluate(node=>node.open))){
+    await menu.locator("summary").click();
+  }
+}
 const server=http.createServer((req,res)=>{
   const pathname=new URL(req.url,"http://localhost").pathname;
   if(!pathname.startsWith(PREFIX)){res.writeHead(404);return res.end("Not found")}
@@ -46,7 +52,7 @@ async function main(){
     await page.locator("#undoReadBtn").click();
     assert.match(await page.locator(".card").first().innerText(),/第5話/);
 
-    await page.locator(".toolbar-more summary").click();
+    await ensureMoreOpen(page);
     const [fixtureDownload]=await Promise.all([page.waitForEvent("download"),page.locator("#fixtureBtn").click()]);
     assert.equal(fixtureDownload.suggestedFilename(),"narou_shelf_preview_fixture_v4.json");
     const fixture=JSON.parse(fs.readFileSync(await fixtureDownload.path(),"utf8"));
@@ -72,7 +78,7 @@ async function main(){
     assert.equal(await page.locator("#restoreDialog").isVisible(),false,"production backups are rejected in demo");
     assert.equal(await page.locator(".card").count(),4,"rejected backup keeps current preview data");
 
-    await page.locator(".toolbar-more summary").click();
+    await ensureMoreOpen(page);
     const [backup]=await Promise.all([page.waitForEvent("download"),page.locator("#exportBtn").click()]);
     assert.match(backup.suggestedFilename(),/^narou_shelf_preview_backup_.*\.json$/);
     const backupData=JSON.parse(fs.readFileSync(await backup.path(),"utf8"));
@@ -83,6 +89,8 @@ async function main(){
       await page.setViewportSize({width,height:800});
       const horizontal=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
       assert.ok(horizontal<=1,"no horizontal overflow at "+width+": "+horizontal);
+      fs.mkdirSync(path.join(ROOT,"artifacts"),{recursive:true});
+      await page.screenshot({path:path.join(ROOT,"artifacts","preview-v7.3-"+width+".png"),fullPage:true});
     }
     await page.reload();
     assert.equal(await page.locator(".card").count(),4,"demo data survives reload");
@@ -93,7 +101,7 @@ async function main(){
     assert.ok(scope.endsWith(PREFIX),"SW scope restricted to preview folder");
     assert.equal(await page.evaluate(()=>localStorage.getItem("narou_shelf_mvp_v3")),"SENTINEL_KEEP_ME");
 
-    await page.locator(".toolbar-more summary").click();
+    await ensureMoreOpen(page);
     await page.locator("#resetDemoBtn").click();
     assert.equal(await page.locator(".card").count(),3,"demo reset restores initial samples");
     assert.equal(await page.evaluate(()=>localStorage.getItem("narou_shelf_mvp_v3")),"SENTINEL_KEEP_ME");
