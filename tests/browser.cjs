@@ -100,6 +100,8 @@ async function main(){
       await page.screenshot({path:path.join(ROOT,"artifacts","v7.3-mobile-"+width+".png"),fullPage:true});
       await page.locator(".toolbar-more summary").click();
       assert.equal(await page.locator("#importBtn").isVisible(),true);
+      const openMenuOverflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
+      assert.ok(openMenuOverflow<=1,"open toolbar menu stays inside viewport at "+width+": "+openMenuOverflow);
       await page.locator(".toolbar-more summary").click();
     }
     assert.deepEqual(errors,[],"no uncaught page errors");
