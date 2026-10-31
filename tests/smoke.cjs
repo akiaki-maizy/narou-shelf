@@ -85,7 +85,7 @@ async function testRestore() {
     version:4,exportedAt:"2026-10-30T14:00:00Z",
     books:[
       {id:"dupe",url:"https://ncode.syosetu.com/n1234aa/4/",title:"上書きされない",readEpisode:0},
-      {id:"new",url:"https://ncode.syosetu.com/n9999zz/",title:"追加作品",readEpisode:1},
+      {id:"one",url:"https://ncode.syosetu.com/n9999zz/",title:"追加作品",readEpisode:1},
       {id:"dupe2",url:"https://ncode.syosetu.com/n9999zz/2/",title:"重複作品"}
     ]
   };
@@ -102,6 +102,9 @@ async function testRestore() {
   assert.equal(restored[0].title,"作品A","existing copy wins when merging");
   assert.equal(JSON.parse(store.get("narou_shelf_pre_restore")).length,2,"pre-restore snapshot saved");
   assert.equal(restored[2].title,"追加作品");
+  assert.notEqual(restored[2].id,restored[0].id,"two different books must have unique IDs");
+  run("markOneRead(books[2].id)");
+  assert.equal(run("books[2].readEpisode"),2,"newly merged book is individually editable");
   console.log("PASS: source syntax, legacy load, sorting, one-click read+undo, max cap, merge, preview, restore snapshot");
 }
 testRestore().catch(error=>{console.error(error);process.exitCode=1});
