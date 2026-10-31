@@ -1,0 +1,47 @@
+name: Narou Shelf smoke tests
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+concurrency:
+  group: narou-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run regression smoke tests
+        run: node tests/smoke.cjs
+  browser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test dependency
+        run: npm install --no-save playwright@1.56.1
+      - name: Install Chromium and dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Run Chromium browser integration tests
+        run: node tests/browser.cjs
+      - name: Upload mobile screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: narou-v73-mobile-screens
+          path: artifacts/*.png
+          if-no-files-found: ignore
+          retention-days: 7
