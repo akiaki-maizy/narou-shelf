@@ -18,3 +18,18 @@ jobs:
           node-version: '22'
       - name: Run regression smoke tests
         run: node tests/smoke.cjs
+  browser:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test dependency
+        run: npm install --no-save playwright@1.56.1
+      - name: Install Chromium and dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Run Chromium browser integration tests
+        run: node tests/browser.cjs
