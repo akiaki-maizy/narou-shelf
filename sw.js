@@ -1,4 +1,5 @@
 const CACHE = "narou-shelf-v7.3";
+const PREFIX = "narou-shelf-v";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest"];
 
 self.addEventListener("install", event => {
@@ -9,7 +10,7 @@ self.addEventListener("install", event => {
 self.addEventListener("activate", event => {
   event.waitUntil(
     Promise.all([
-      caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))),
+      caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith(PREFIX) && k !== CACHE).map(k => caches.delete(k)))),
       self.clients.claim()
     ])
   );
