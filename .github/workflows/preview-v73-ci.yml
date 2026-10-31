@@ -1,0 +1,38 @@
+name: Preview v7.3 safety and browser tests
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "preview/v7.3/**"
+      - "tests/preview-browser.cjs"
+      - ".github/workflows/preview-v73-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "preview/v7.3/**"
+      - "tests/preview-browser.cjs"
+      - ".github/workflows/preview-v73-ci.yml"
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: npm install --no-save playwright@1.56.1
+      - name: Install Chromium browser
+        run: npx playwright install --with-deps chromium
+      - name: Test preview in a real browser
+        run: node tests/preview-browser.cjs
+      - name: Upload screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: narou-v73-preview-screenshots
+          path: artifacts/*.png
+          if-no-files-found: ignore
+          retention-days: 7

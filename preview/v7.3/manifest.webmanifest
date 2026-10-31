@@ -1,0 +1,11 @@
+{
+  "id": "./",
+  "name": "なろう本棚 Ver.7.3 検証用",
+  "short_name": "なろう検証",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#111418",
+  "theme_color": "#111418",
+  "description": "本番と分離されたサンプル専用のなろう本棚Ver.7.3テスト版"
+}
