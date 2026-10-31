@@ -306,6 +306,20 @@ function mergeImportedBooks(current,incoming){
   }
   return [...current,...added];
 }
+function ensureUniqueBookIds(items){
+  const seen=new Set();
+  let serial=0;
+  return items.map(book=>{
+    let id=String(book.id||"");
+    if(!id || seen.has(id)){
+      const base=(crypto.randomUUID?.()||("restored-"+Date.now()));
+      id=base;
+      while(seen.has(id))id=base+"-"+(++serial);
+    }
+    seen.add(id);
+    return id===book.id?book:{...book,id};
+  });
+}
 function hideUndo(){
   readUndo=null;
   $("undoToast").hidden=true;
@@ -742,7 +756,7 @@ $("restoreDialog").addEventListener("close",()=>{pendingRestore=null});
 $("restoreApplyBtn").addEventListener("click",()=>{
   if(!pendingRestore)return;
   const mode=document.querySelector('input[name="restoreMode"]:checked')?.value||"merge";
-  const next=mode==="replace"?pendingRestore.books:mergeImportedBooks(books,pendingRestore.books);
+  const next=ensureUniqueBookIds(mode==="replace"?pendingRestore.books:mergeImportedBooks(books,pendingRestore.books));
   try{
     // 退避に失敗した場合は現在のデータを変更しない
     localStorage.setItem(KEY_PRE_RESTORE,JSON.stringify(books));
