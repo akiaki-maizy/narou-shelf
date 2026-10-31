@@ -1,0 +1,20 @@
+name: Narou Shelf smoke tests
+on:
+  push:
+    branches:
+      - feature/v7.3-reading-backup
+  pull_request:
+    branches:
+      - main
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run regression smoke tests
+        run: node tests/smoke.cjs
