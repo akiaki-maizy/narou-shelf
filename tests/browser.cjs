@@ -66,6 +66,8 @@ async function main(){
     assert.match(await page.locator("#restorePreview").innerText(),/重複除外後：2件/);
     assert.match(await page.locator("#restorePreview").innerText(),/統合時に新規追加：1件/);
     assert.equal(await page.locator('input[name="restoreMode"]:checked').inputValue(),"merge");
+    fs.mkdirSync(path.join(ROOT,"artifacts"),{recursive:true});
+    await page.screenshot({path:path.join(ROOT,"artifacts","v7.3-restore-preview.png"),fullPage:true});
     await page.locator("#restoreApplyBtn").click();
     stored=await page.evaluate(()=>JSON.parse(localStorage.getItem("narou_shelf_mvp_v3")));
     assert.equal(stored.length,4);
@@ -95,13 +97,40 @@ async function main(){
         body:document.body.scrollWidth
       }));
       assert.ok(dims.document<=dims.viewport+1,"no horizontal scroll at "+width+": "+JSON.stringify(dims));
+      await page.screenshot({path:path.join(ROOT,"artifacts","v7.3-mobile-"+width+".png"),fullPage:true});
       await page.locator(".toolbar-more summary").click();
       assert.equal(await page.locator("#importBtn").isVisible(),true);
       await page.locator(".toolbar-more summary").click();
     }
     assert.deepEqual(errors,[],"no uncaught page errors");
+
+    const replaceContext=await browser.newContext({viewport:{width:375,height:812}});
+    const replacePage=await replaceContext.newPage();
+    replacePage.on("dialog",dialog=>dialog.accept());
+    await replacePage.goto(base);
+    await replacePage.evaluate(data=>localStorage.setItem("narou_shelf_mvp_v3",JSON.stringify(data)),sample);
+    await replacePage.reload();
+    await replacePage.locator("#importFile").setInputFiles({
+      name:"corrupt.json",mimeType:"application/json",buffer:Buffer.from("{invalid JSON")
+    });
+    let afterInvalid=await replacePage.evaluate(()=>JSON.parse(localStorage.getItem("narou_shelf_mvp_v3")));
+    assert.equal(afterInvalid.length,3,"invalid JSON never alters records");
+    assert.equal(await replacePage.locator("#restoreDialog").isVisible(),false,"invalid JSON does not open restore dialog");
+
+    await replacePage.locator("#importFile").setInputFiles({
+      name:"valid.json",mimeType:"application/json",buffer:Buffer.from(JSON.stringify(payload))
+    });
+    await replacePage.locator("#restoreDialog").waitFor({state:"visible"});
+    await replacePage.locator('input[name="restoreMode"][value="replace"]').check();
+    await replacePage.locator("#restoreApplyBtn").click();
+    const replaced=await replacePage.evaluate(()=>JSON.parse(localStorage.getItem("narou_shelf_mvp_v3")));
+    assert.equal(replaced.length,2,"replacement uses unique incoming entries");
+    assert.equal(replaced.some(x=>x.title==="追跡している作品"),false,"replacement truly replaces old records");
+    const replaceSnapshot=await replacePage.evaluate(()=>JSON.parse(localStorage.getItem("narou_shelf_pre_restore")));
+    assert.equal(replaceSnapshot.length,3,"replacement keeps pre-restore snapshot");
+    await replaceContext.close();
     await context.close();
-    console.log("PASS: Chromium UI, one-click read and undo, safe merge, browser download, reload, 360/375/412px responsive layouts");
+    console.log("PASS: Chromium UI, one-click read and undo, merge/replace, corrupt backup isolation, browser download, reload, responsive screenshots");
   }finally{
     await browser.close();
     await close();
